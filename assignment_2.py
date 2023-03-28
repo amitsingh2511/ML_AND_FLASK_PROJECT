@@ -1,6 +1,9 @@
 from flask import Flask, request, jsonify, make_response
 from flask_sqlalchemy import SQLAlchemy
 import uuid
+from pydantic import BaseModel
+
+from flask_pydantic import validate
 
 import jwt
 from datetime import datetime, timedelta
@@ -36,7 +39,14 @@ class User(db.Model):
     name = db.Column(db.String(100))
     email = db.Column(db.String(70), unique = True)
     password = db.Column(db.String(80))
-        
+
+class RequestBodyModel(BaseModel):
+  native_english_speaker: int
+  course_instructor: int
+  course: str
+  semester: int 
+  class_size: int  
+  performance_score: float 
 
 def token_required(f):
 	@wraps(f)
@@ -83,15 +93,18 @@ def get_course(current_user):
 
 
 @app.route('/course', methods=['POST'])
-@token_required
-def create_course(current_user):
-	body = request.get_json()
-	native_english_speaker = body['native_english_speaker']
-	course_instructor = body['course_instructor']
-	course = body['course']
-	semester = body['semester']
-	class_size = body['class_size']
-	performance_score = body['performance_score']
+# @token_required
+@validate()
+def create_course(body: RequestBodyModel):
+	# body = request.get_json()
+	# body = RequestBodyModel
+	print("body====",body)
+	native_english_speaker = body.native_english_speaker
+	course_instructor = body.course_instructor
+	course = body.course
+	semester = body.semester
+	class_size = body.class_size
+	performance_score = body.performance_score
 	data =Course(
 		native_english_speaker=native_english_speaker,
 		course_instructor=course_instructor,
