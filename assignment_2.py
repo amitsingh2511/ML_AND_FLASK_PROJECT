@@ -1,7 +1,9 @@
 from flask import Flask, request, jsonify, make_response
 from flask_sqlalchemy import SQLAlchemy
 import uuid
+from typing import Optional
 from pydantic import BaseModel
+import json
 
 from flask_pydantic import validate
 
@@ -40,13 +42,22 @@ class User(db.Model):
     email = db.Column(db.String(70), unique = True)
     password = db.Column(db.String(80))
 
-class RequestBodyModel(BaseModel):
-  native_english_speaker: int
-  course_instructor: int
-  course: str
-  semester: int 
-  class_size: int  
-  performance_score: float 
+class CreateCourse(BaseModel):
+	native_english_speaker: str
+	course_instructor: str
+	course: str
+	semester: int 
+	class_size: int  
+	performance_score: float 
+
+class UpdateCourse(BaseModel):
+	native_english_speaker: Optional[str]
+	course_instructor: Optional[str]
+	course: Optional[str]
+	semester: Optional[int] 
+	class_size: Optional[int]  
+	performance_score: Optional[float] 
+
 
 def token_required(f):
 	@wraps(f)
@@ -73,38 +84,39 @@ def token_required(f):
 @app.route('/cource/<id>', methods=['GET'])
 @token_required
 def get_course_list(current_user,id):
-  course = Course.query.get(id)
-  if course is None:
-     return f"Id {id} does not exsit."
-  
-  del course.__dict__['_sa_instance_state']
-  
-  return jsonify(course.__dict__)
+	course = Course.query.get(id)
+	if course is None:
+		return jsonify(
+			{'massage': f"Id {id} does not exist."}
+		),400
+	
+	del course.__dict__['_sa_instance_state']
+	
+	return jsonify(course.__dict__)
 
 
 @app.route('/cource', methods=['GET'])
 @token_required
 def get_course(current_user):
-  course_list = []
-  for course in db.session.query(Course).all():
-    del course.__dict__['_sa_instance_state']
-    course_list.append(course.__dict__)
-  return jsonify(course_list)
+	course_list = []
+	for course in db.session.query(Course).all():
+		del course.__dict__['_sa_instance_state']
+		course_list.append(course.__dict__)
+	return jsonify(course_list)
 
 
 @app.route('/course', methods=['POST'])
-# @token_required
+@token_required
 @validate()
-def create_course(body: RequestBodyModel):
-	# body = request.get_json()
-	# body = RequestBodyModel
-	print("body====",body)
+def create_course(current_user,body: CreateCourse):
+
 	native_english_speaker = body.native_english_speaker
 	course_instructor = body.course_instructor
 	course = body.course
 	semester = body.semester
 	class_size = body.class_size
 	performance_score = body.performance_score
+
 	data =Course(
 		native_english_speaker=native_english_speaker,
 		course_instructor=course_instructor,
@@ -130,20 +142,55 @@ def create_course(body: RequestBodyModel):
 
 @app.route('/course/<id>', methods=['PUT'])
 @token_required
-def update_course(current_user,id):
-  body = request.get_json()
-  db.session.query(Course).filter_by(id=id).update(
-    dict(title=body['title'], content=body['content']))
-  db.session.commit()
-  return "course updated"
+@validate()
+def update_course(current_user,id,body:UpdateCourse):
+	course_details = Course.query.get(id)
+	if course_details is None:
+		return jsonify(
+			{'massage': f"Id {id} does not exist"}
+		),400
+	
+	if body.native_english_speaker is not None:
+		course_details.native_english_speaker = body.native_english_speaker
+	if body.course_instructor is not None:
+		course_details.course_instructor = body.course_instructor
+	if body.course is not None:
+		course_details.course = body.course
+	if body.semester is not None:
+		course_details.semester = body.semester
+	if body.class_size is not None:
+		course_details.class_size = body.class_size
+	if body.performance_score is not None:
+		course_details.performance_score = body.performance_score
+
+	db.session.commit()
+
+	return jsonify({
+		'id': course_details.id,
+		'native_english_speaker': course_details.native_english_speaker,
+		'course_instructor': course_details.course_instructor,
+		'course' : course_details.course,
+		'semester' : course_details.semester,
+		'class_size' : course_details.class_size,
+		'performance_score' : course_details.performance_score
+	}
+	),200
 
 
 @app.route('/course/<id>', methods=['DELETE'])
 @token_required
 def delete_course(current_user,id):
-  db.session.query(Course).filter_by(id=id).delete()
-  db.session.commit()
-  return "deleted"
+	course = Course.query.get(id)
+	if course is None:
+		return jsonify(
+			{'massage': f"Id {id} does not exist"}
+		),400
+	
+	db.session.query(Course).filter_by(id=id).delete()
+	db.session.commit()
+	return jsonify(
+		{'massage': f"Id {id} deleted."}
+	),200
 
 
 @app.route('/user-list', methods =['GET'])
@@ -174,7 +221,7 @@ def login():
 	if not user:
 		return jsonify(
 			{'massage': "Email does not exist."}
-		),401
+		),400
 	
 	password = User.query.filter_by(password = auth.get('password')).first()	
 	if password:
@@ -186,7 +233,7 @@ def login():
 	
 	return jsonify(
 		{'massage': "Wrong password."}
-	),401
+	),400
 
 
 @app.route('/signup', methods =['POST'])
